@@ -30,9 +30,13 @@ def init_messages():
 
 
 def select_model():
-    model = st.sidebar.radio("Choose a model:", ("GPT-3.5", "GPT-4"))
+    model = st.sidebar.radio("Choose a model:", ("GPT-3.5", "GPT-4", "GPT-4o"))
+    # サイドバーにラジオボタンを作成し、使用するモデルを選択
+
     if model == "GPT-3.5":
         model_name = "gpt-3.5-turbo"
+    elif model == "GPT-4o":
+        model_name = "gpt-4o"
     else:
         model_name = "gpt-4"
 
