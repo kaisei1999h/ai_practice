@@ -1,163 +1,120 @@
-# 必要なライブラリをインポート
-from glob import glob  # ファイルパターンのマッチングに使用
-import streamlit as st  # ウェブアプリケーションフレームワーク
-import pdfplumber  # PDFからテキストを抽出するライブラリ
-from langchain.text_splitter import RecursiveCharacterTextSplitter  # テキストをチャンクに分割するためのライブラリ
-from langchain.vectorstores import Qdrant  # ベクトルストアを構築するライブラリ
-from langchain.embeddings.openai import OpenAIEmbeddings  # OpenAIの埋め込みモデルを使用するライブラリ
-from langchain.chains import RetrievalQA  # 質問応答モデルを構築するライブラリ
-from langchain.chat_models import ChatOpenAI  # OpenAIのチャットモデルを使用するライブラリ
-from langchain.llms import OpenAI  # OpenAIの言語モデルを使用するライブラリ
-from langchain.callbacks import get_openai_callback  # OpenAIのコールバックを取得するライブラリ
-from qdrant_client import QdrantClient  # Qdrantクライアントライブラリ
-from qdrant_client.models import Distance, VectorParams  # Qdrantのベクトル設定
-
-# Qdrant の設定
-QDRANT_PATH = "./local_qdrant"  # ローカルQdrantのパス
-COLLECTION_NAME = "study_materials"  # コレクション名
+import streamlit as st
+import pdfplumber
+from langchain.chat_models import ChatOpenAI
 
 # ページの初期化
 def init_page():
-    st.set_page_config(
-        page_title="Study Helper",  # ページのタイトルを設定
-        page_icon="📘"  # ページのアイコンを設定
-    )
-    st.sidebar.title("Navigation")  # サイドバーのタイトルを設定
-    st.session_state.costs = []  # セッションステートにコストのリストを初期化
+    st.set_page_config(page_title="学習ヘルパー", page_icon="📘")
+    st.title("PDF 学習支援 (GPT-4)")
 
-# モデルの選択
-def select_model():
-    model = st.sidebar.radio("Choose a model:", ("GPT-3.5", "GPT-3.5-16k", "GPT-4", "GPT-4o"))  # モデル選択のラジオボタン
-    if model == "GPT-3.5":
-        st.session_state.model_name = "gpt-3.5-turbo"  # GPT-3.5 モデル名を設定
-    elif model == "GPT-3.5-16k":
-        st.session_state.model_name = "gpt-3.5-turbo-16k"  # GPT-3.5-16k モデル名を設定
-    elif model == "GPT-4":
-        st.session_state.model_name = "gpt-4"  # GPT-4 モデル名を設定
-    else:
-        st.session_state.model_name = "gpt-4o"  # GPT-4o モデル名を設定
-
-    st.session_state.max_token = OpenAI.modelname_to_contextsize(st.session_state.model_name) - 300  # 最大トークン数を設定
-    return ChatOpenAI(temperature=0, model_name=st.session_state.model_name)  # 選択したモデルのインスタンスを返す
+# GPT-4モデルの初期化
+def initialize_model():
+    return ChatOpenAI(temperature=0, model_name="gpt-4o")
 
 # PDF からテキストを抽出する関数
 def get_pdf_text(uploaded_file):
     with pdfplumber.open(uploaded_file) as pdf:
-        text = ''  # テキストを初期化
-        for page in pdf.pages:
-            text += page.extract_text() + '\n'  # 各ページからテキストを抽出して結合
-    return text  # 抽出されたテキストを返す
+        return "\n".join(page.extract_text() for page in pdf.pages)
 
-# テキストをチャンクに分割する関数
-def split_text(text):
-    text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-        model_name="text-embedding-ada-002",  # 使用するエンコーダーモデルを指定
-        chunk_size=500,  # チャンクのサイズを設定
-        chunk_overlap=0,  # チャンクの重複を設定
-    )
-    return text_splitter.split_text(text)  # テキストをチャンクに分割して返す
+# GPTに問題作成を依頼する関数
+def generate_question_with_gpt(llm, pdf_text, question_type):
+    prompt = f"""以下のテキストの内容に基づいて、一問一答形式の問題を作成してください。
+    新しい問題を始める際は、「次の問題」と表示してから問題を提示してください。
+    問題は一問のみ作成してください。複数答えさせる問題は作成しないでください。
 
-# Qdrant をロードする関数
-def load_qdrant():
-    client = QdrantClient(path=QDRANT_PATH)  # Qdrant クライアントを作成
-    collections = client.get_collections().collections  # コレクションのリストを取得
-    collection_names = [collection.name for collection in collections]  # コレクション名のリストを作成
 
-    if COLLECTION_NAME not in collection_names:
-        client.create_collection(
-            collection_name=COLLECTION_NAME,  # コレクション名を指定
-            vectors_config=VectorParams(size=1536, distance=Distance.COSINE),  # ベクトルの設定を指定
-        )
-        print('collection created')  # コレクションが作成されたことを表示
+    テキスト:
+    {pdf_text}
 
-    return Qdrant(
-        client=client,  # Qdrant クライアントを設定
-        collection_name=COLLECTION_NAME,  # コレクション名を設定
-        embeddings=OpenAIEmbeddings()  # 使用する埋め込みモデルを設定
-    )
+    問題のタイプ: {question_type}
 
-# ベクトルストアを構築する関数
-def build_vector_store(pdf_text):
-    qdrant = load_qdrant()  # Qdrant をロード
-    qdrant.add_texts(pdf_text)  # テキストを追加してベクトルストアを構築
+    最初の問題を出題してください。
+    """
+    return llm.predict(prompt)
 
-# 質問応答モデルを構築する関数
-def build_qa_model(llm):
-    qdrant = load_qdrant()  # Qdrant をロード
-    retriever = qdrant.as_retriever(
-        search_type="similarity",  # 類似性検索を設定
-        search_kwargs={"k":10}  # 検索パラメータを設定
-    )
-    return RetrievalQA.from_chain_type(
-        llm=llm,  # 使用するLLMを設定
-        chain_type="stuff",  # チェーンのタイプを設定
-        retriever=retriever,  # レトリバーを設定
-        return_source_documents=True,  # ソースドキュメントを返す設定
-        verbose=True  # 詳細出力を設定
-    )
+# GPTに正誤判定を依頼する関数
+def check_answer_with_gpt(llm, conversation, user_answer):
+    prompt = f"""以下の会話の続きとして、ユーザーの回答に対する正誤判定と詳細な解説を提供してください。
+    次の問題は出さずに、正誤判定と解説のみを行ってください。
 
-# PDF アップロードとベクトルストアの構築ページを表示する関数
-def page_pdf_upload_and_build_vector_db():
-    st.title("PDF Upload")  # ページのタイトルを設定
-    container = st.container()  # コンテナを作成
-    with container:
-        uploaded_file = st.file_uploader(label='Upload your study PDF here📚', type='pdf')  # ファイルアップローダーを作成
-        if uploaded_file:
-            with st.spinner("Extracting text from PDF..."):  # テキスト抽出中のスピナーを表示
-                pdf_text = get_pdf_text(uploaded_file)  # PDFからテキストを抽出
-                st.write("Extracted Text:")  # 抽出されたテキストのラベルを表示
-                st.write(pdf_text)  # 抽出されたテキストを表示
-                pdf_chunks = split_text(pdf_text)  # テキストをチャンクに分割
-            with st.spinner("Building vector store..."):  # ベクトルストア構築中のスピナーを表示
-                build_vector_store(pdf_chunks)  # ベクトルストアを構築
-            st.success("PDF uploaded and processed successfully!")  # 成功メッセージを表示
+    これまでの会話:
+    {conversation}
 
-# 問題を生成し、正誤判定を行う関数
-def generate_question_and_check_answer(qa, query, user_answer):
-    with get_openai_callback() as cb:  # OpenAIのコールバックを設定
-        response = qa(query)  # 質問に対する回答を取得
-    correct_answer = response["result"]  # 回答を取得
-    is_correct = user_answer.lower() in correct_answer.lower()  # 正誤判定を行う
-    return correct_answer, is_correct, cb.total_cost  # 回答、正誤判定結果、コストを返す
+    ユーザーの回答: {user_answer}
 
-# 問題を出題するページを表示する関数
-def page_ask_my_pdf():
-    st.title("Study Questions")  # ページのタイトルを設定
-    llm = select_model()  # モデルを選択
-    container = st.container()  # コンテナを作成
-    response_container = st.container()  # レスポンスコンテナを作成
-    with container:
-        query = st.text_input("Enter your question: ", key="input")  # クエリの入力欄を作成
-        user_answer = st.text_input("Enter your answer: ", key="answer")  # 解答の入力欄を作成
-        if query and user_answer:
-            qa = build_qa_model(llm)  # 質問応答モデルを構築
-            if qa:
-                with st.spinner("Checking your answer..."):  # 回答確認中のスピナーを表示
-                    correct_answer, is_correct, cost = generate_question_and_check_answer(qa, query, user_answer)  # 正誤判定を行う
-                st.session_state.costs.append(cost)  # コストをセッションステートに追加
-                if is_correct:
-                    st.success(f"Correct! The answer is: {correct_answer}")  # 正解の場合のメッセージを表示
-                else:
-                    st.error(f"Incorrect. The correct answer is: {correct_answer}")  # 不正解の場合のメッセージを表示
-                st.markdown(f"## Explanation")  # 解説のラベルを表示
-                st.write(correct_answer)  # 解説を表示
-        else:
-            st.write("Please enter a question and your answer.")  # クエリと解答の入力を促すメッセージを表示
+    正誤判定と解説:
+    """
+    return llm.predict(prompt)
 
-# メイン関数
+# 次の問題を生成する関数
+def generate_next_question(llm, conversation):
+    prompt = f"""以下の会話の続きとして、新しい問題を生成してください。
+    「次の問題」と表示してから問題を提示してください。
+
+    これまでの会話:
+    {conversation}
+
+    次の問題:
+    """
+    return llm.predict(prompt)
+
 def main():
     init_page()  # ページを初期化
-    selection = st.sidebar.radio("Go to", ["PDF Upload", "Study Questions"])  # サイドバーのラジオボタンでページを選択
-    if selection == "PDF Upload":
-        page_pdf_upload_and_build_vector_db()  # PDFアップロードページを表示
-    elif selection == "Study Questions":
-        page_ask_my_pdf()  # 問題出題ページを表示
-    costs = st.session_state.get('costs', [])  # セッションステートからコストを取得
-    st.sidebar.markdown("## Costs")  # サイドバーにコストのラベルを表示
-    st.sidebar.markdown(f"**Total cost: ${sum(costs):.5f}**")  # 合計コストを表示
-    for cost in costs:
-        st.sidebar.markdown(f"- ${cost:.5f}")  # 各コストをサイドバーに表示
+    llm = initialize_model()  # GPT-4モデルを初期化
+
+    # セッション状態を初期化
+    if 'conversation' not in st.session_state:
+        st.session_state.conversation = ""
+    if 'current_question' not in st.session_state:
+        st.session_state.current_question = ""
+    if 'waiting_for_answer' not in st.session_state:
+        st.session_state.waiting_for_answer = False
+    if 'user_answer' not in st.session_state:
+        st.session_state.user_answer = ""
+
+    uploaded_file = st.file_uploader("勉強用PDFをアップロードしてください📚", type='pdf')
+    if uploaded_file:
+        with st.spinner("PDFからテキストを抽出中..."):
+            pdf_text = get_pdf_text(uploaded_file)
+        st.success("PDFの抽出が完了しました！")
+
+        question_type = st.text_input("どのような問題を出してほしいですか？（例：単語の意味を問う、文法について質問する）")
+        if question_type and not st.session_state.current_question:
+            st.session_state.current_question = generate_question_with_gpt(llm, pdf_text, question_type)
+            st.session_state.conversation += f"\n{st.session_state.current_question}"
+            st.session_state.waiting_for_answer = True
+
+        if st.session_state.current_question:
+            st.write("現在の問題:")
+            st.write(st.session_state.current_question)
+
+        if st.session_state.waiting_for_answer:
+            user_answer = st.text_input("あなたの回答を入力してください（終了する場合は「終了」と入力）:", key="answer_input")
+            if user_answer.lower() == "終了":
+                st.write("学習セッションを終了します。お疲れ様でした！")
+                st.session_state.conversation = ""
+                st.session_state.current_question = ""
+                st.session_state.waiting_for_answer = False
+                st.session_state.user_answer = ""
+            elif user_answer:
+                st.session_state.conversation += f"\nユーザーの回答: {user_answer}"
+                feedback = check_answer_with_gpt(llm, st.session_state.conversation, user_answer)
+                st.write("評価結果:")
+                st.write(feedback)
+                st.session_state.conversation += f"\n{feedback}"
+                st.session_state.waiting_for_answer = False
+                st.session_state.user_answer = user_answer
+
+        if not st.session_state.waiting_for_answer and st.session_state.current_question:
+            if st.button("次の問題へ進む"):
+                st.session_state.current_question = generate_next_question(llm, st.session_state.conversation)
+                st.session_state.conversation += f"\n{st.session_state.current_question}"
+                st.session_state.waiting_for_answer = True
+                st.session_state.user_answer = ""
+                st.experimental_rerun()  # Streamlitの再実行をトリガー
+
+        st.write("現在の会話履歴:")
+        st.write(st.session_state.conversation)
 
 if __name__ == '__main__':
-    main()  # メイン関数を実行
-
+    main()
