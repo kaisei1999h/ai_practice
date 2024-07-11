@@ -68,7 +68,6 @@ def generate_next_question(llm, conversation, pdf_text, question_type):
 
 
 def main():
-    # セッション状態の初期化
     if 'initialized' not in st.session_state:
         st.session_state.initialized = True
         st.session_state.question_number = 1
@@ -76,36 +75,40 @@ def main():
         st.session_state.current_question = ""
         st.session_state.waiting_for_answer = False
         st.session_state.user_answer = ""
-        st.session_state.pdf_text = ""
-        st.session_state.question_type = ""
-
-    # モデルの初期化
+    init_page()
     llm = initialize_model()
 
-    # PDFアップロード
+    if 'conversation' not in st.session_state:
+        st.session_state.conversation = ""
+    if 'current_question' not in st.session_state:
+        st.session_state.current_question = ""
+    if 'waiting_for_answer' not in st.session_state:
+        st.session_state.waiting_for_answer = False
+    if 'user_answer' not in st.session_state:
+        st.session_state.user_answer = ""
+    if 'pdf_text' not in st.session_state:
+        st.session_state.pdf_text = ""
+    if 'question_type' not in st.session_state:
+        st.session_state.question_type = ""
+
     uploaded_file = st.file_uploader("勉強用PDFをアップロードしてください📚", type='pdf')
-    if uploaded_file and not st.session_state.pdf_text:
+    if uploaded_file:
         with st.spinner("PDFからテキストを抽出中..."):
             st.session_state.pdf_text = get_pdf_text(uploaded_file)
         st.success("PDFの抽出が完了しました！")
 
-    # 問題タイプの入力
-    st.session_state.question_type = st.text_input("どのような問題を出してほしいですか？", value=st.session_state.question_type)
+    st.session_state.question_type = st.text_input("どのような問題を出してほしいですか？（例：単語の意味を問う、文法について質問する）", value=st.session_state.question_type)
     
-    # 最初の問題生成
     if st.session_state.pdf_text and st.session_state.question_type and not st.session_state.current_question:
         st.session_state.current_question = generate_question_with_gpt(llm, st.session_state.pdf_text, st.session_state.question_type)
-        st.session_state.conversation += f"\n質問 {st.session_state.question_number}: {st.session_state.current_question}"
+        st.session_state.conversation += f"\n質問: {st.session_state.current_question}"
         st.session_state.waiting_for_answer = True
 
-    # 現在の問題表示
     if st.session_state.current_question:
-        st.write(f"問題 {st.session_state.question_number}:")
         st.write(st.session_state.current_question)
 
-    # ユーザーの回答入力と評価
     if st.session_state.waiting_for_answer:
-        user_answer = st.text_input("あなたの回答を入力してください:", key=f"answer_input_{st.session_state.question_number}")
+        user_answer = st.text_input("あなたの回答を入力してください:", key="answer_input", value="")
         if user_answer:
             st.session_state.conversation += f"\nユーザーの回答: {user_answer}"
             feedback = check_answer_with_gpt(llm, st.session_state.conversation, user_answer)
@@ -115,25 +118,32 @@ def main():
             st.session_state.waiting_for_answer = False
             st.session_state.user_answer = user_answer
 
-    # 次の問題へ進むボタン
     if not st.session_state.waiting_for_answer and st.session_state.current_question:
-        if st.button("次の問題へ進む", key=f"next_question_{st.session_state.question_number}"):
-            st.session_state.question_number += 1
+        if st.button("次の問題へ進む"):
             st.session_state.current_question = generate_next_question(llm, st.session_state.conversation, st.session_state.pdf_text, st.session_state.question_type)
-            st.session_state.conversation += f"\n質問 {st.session_state.question_number}: {st.session_state.current_question}"
+            st.session_state.conversation += f"\n質問: {st.session_state.current_question}"
             st.session_state.waiting_for_answer = True
             st.session_state.user_answer = ""
-            st.rerun()
+            st.experimental_rerun()
 
-    # # 会話履歴の表示
+    # リセットボタンの追加
+    if st.button("学習をリセット"):
+        # PDF データのみ保持
+        pdf_text = st.session_state.pdf_text
+        
+        # セッション状態をリセット
+        for key in list(st.session_state.keys()):
+            if key != 'pdf_text':
+                del st.session_state[key]
+        
+        # 保持したPDFデータを再設定
+        st.session_state.pdf_text = pdf_text
+        
+        st.success("学習がリセットされました。新しい問題タイプを入力してください。")
+        st.experimental_rerun()
+
     # st.write("現在の会話履歴:")
     # st.write(st.session_state.conversation)
-
-    # デバッグ情報（必要に応じてコメントアウトを解除）
-    # st.write("Debug Info:")
-    # st.write(f"Question Number: {st.session_state.question_number}")
-    # st.write(f"Waiting for Answer: {st.session_state.waiting_for_answer}")
-    # st.write(f"Current Question: {st.session_state.current_question}")
 
 if __name__ == '__main__':
     main()
