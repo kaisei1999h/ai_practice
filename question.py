@@ -118,7 +118,7 @@ def main():
             st.session_state.waiting_for_answer = False
             st.session_state.user_answer = user_answer
 
-   if not st.session_state.waiting_for_answer and st.session_state.current_question:
+    if not st.session_state.waiting_for_answer and st.session_state.current_question:
         if 'next_question_clicked' not in st.session_state:
             st.session_state.next_question_clicked = False
 
