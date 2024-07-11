@@ -119,34 +119,28 @@ def main():
             st.session_state.user_answer = user_answer
 
     if not st.session_state.waiting_for_answer and st.session_state.current_question:
-        if 'next_question_clicked' not in st.session_state:
-            st.session_state.next_question_clicked = False
-
-        if not st.session_state.next_question_clicked:
-            if st.button("次の問題へ進む"):
-                st.session_state.current_question = generate_next_question(llm, st.session_state.conversation, st.session_state.pdf_text, st.session_state.question_type)
-                st.session_state.conversation += f"\n質問: {st.session_state.current_question}"
-                st.session_state.waiting_for_answer = True
-                st.session_state.user_answer = ""
-                st.session_state.next_question_clicked = True
-                st.experimental_rerun()
+        if st.button("次の問題へ進む"):
+            st.session_state.current_question = generate_next_question(llm, st.session_state.conversation, st.session_state.pdf_text, st.session_state.question_type)
+            st.session_state.conversation += f"\n質問: {st.session_state.current_question}"
+            st.session_state.waiting_for_answer = True
+            st.session_state.user_answer = ""
+            st.experimental_rerun()
 
     # リセットボタンの追加
     if st.button("学習をリセット"):
         # PDF データのみ保持
         pdf_text = st.session_state.pdf_text
-
+        
         # セッション状態をリセット
         for key in list(st.session_state.keys()):
             if key != 'pdf_text':
                 del st.session_state[key]
-
+        
         # 保持したPDFデータを再設定
         st.session_state.pdf_text = pdf_text
         
         st.success("学習がリセットされました。新しい問題タイプを入力してください。")
         st.experimental_rerun()
-
 
     # st.write("現在の会話履歴:")
     # st.write(st.session_state.conversation)
