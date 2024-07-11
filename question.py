@@ -26,7 +26,7 @@ def get_random_text_sample(pdf_text, length=1000):
 def generate_question_with_gpt(llm, pdf_text, question_type):
     text_sample = get_random_text_sample(pdf_text)
     prompt = f"""以下のテキストの内容に基づいて、{question_type}の一問一答形式の問題を1つ作成してください。
-    問題はランダムに選んでください。前回と同じ問題にならないようにしてください。
+    問題はランダムに選んでください。前回と同じ問題にならないようにしてください。あなたは学校の先生です。ユーザは日本の中学生です。
     答えは別途出力するため、ここでは問題文のみを出力してください。
 
     テキスト:
@@ -50,8 +50,10 @@ def check_answer_with_gpt(llm, conversation, user_answer):
 
 def generate_next_question(llm, conversation, pdf_text, question_type):
     text_sample = get_random_text_sample(pdf_text)
-    prompt = f"""以下の会話履歴と元のテキストに基づいて、新しい一問一答形式の問題を作成してください。
-    問題は一問のみ作成してください。複数答えさせる問題は作成しないでください。
+    prompt = f"""以下のテキストの内容に基づいて、{question_type}の一問一答形式の問題を1つ作成してください。
+    問題は一問のみ作成してください。複数答えさせる問題は作成しないでください。回答は一つのみにしてください。
+    問題はランダムに選んでください。前回と同じ,似たような問題にならないようにしてください。
+    答えは別途出力するため、ここでは問題文のみを出力してください。あなたは学校の先生です。ユーザは日本の中学生です。
     これまでの会話:
     {conversation}
     
