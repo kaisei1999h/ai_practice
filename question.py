@@ -68,6 +68,13 @@ def generate_next_question(llm, conversation, pdf_text, question_type):
 
 
 def main():
+    if 'initialized' not in st.session_state:
+        st.session_state.initialized = True
+        st.session_state.question_number = 1
+        st.session_state.conversation = ""
+        st.session_state.current_question = ""
+        st.session_state.waiting_for_answer = False
+        st.session_state.user_answer = ""
     init_page()
     llm = initialize_model()
 
