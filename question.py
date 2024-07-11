@@ -68,7 +68,6 @@ def generate_next_question(llm, conversation, pdf_text, question_type):
 
 
 def main():
-def main():
     # セッション状態の初期化
     if 'initialized' not in st.session_state:
         st.session_state.initialized = True
