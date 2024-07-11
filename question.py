@@ -135,12 +135,12 @@ def main():
     if st.button("学習をリセット"):
         # PDF データのみ保持
         pdf_text = st.session_state.pdf_text
-        
+
         # セッション状態をリセット
         for key in list(st.session_state.keys()):
             if key != 'pdf_text':
                 del st.session_state[key]
-        
+
         # 保持したPDFデータを再設定
         st.session_state.pdf_text = pdf_text
         
