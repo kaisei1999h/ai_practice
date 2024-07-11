@@ -118,13 +118,18 @@ def main():
             st.session_state.waiting_for_answer = False
             st.session_state.user_answer = user_answer
 
-    if not st.session_state.waiting_for_answer and st.session_state.current_question:
-        if st.button("次の問題へ進む"):
-            st.session_state.current_question = generate_next_question(llm, st.session_state.conversation, st.session_state.pdf_text, st.session_state.question_type)
-            st.session_state.conversation += f"\n質問: {st.session_state.current_question}"
-            st.session_state.waiting_for_answer = True
-            st.session_state.user_answer = ""
-            st.experimental_rerun()
+   if not st.session_state.waiting_for_answer and st.session_state.current_question:
+        if 'next_question_clicked' not in st.session_state:
+            st.session_state.next_question_clicked = False
+
+        if not st.session_state.next_question_clicked:
+            if st.button("次の問題へ進む"):
+                st.session_state.current_question = generate_next_question(llm, st.session_state.conversation, st.session_state.pdf_text, st.session_state.question_type)
+                st.session_state.conversation += f"\n質問: {st.session_state.current_question}"
+                st.session_state.waiting_for_answer = True
+                st.session_state.user_answer = ""
+                st.session_state.next_question_clicked = True
+                st.experimental_rerun()
 
     # リセットボタンの追加
     if st.button("学習をリセット"):
@@ -141,6 +146,7 @@ def main():
         
         st.success("学習がリセットされました。新しい問題タイプを入力してください。")
         st.experimental_rerun()
+
 
     # st.write("現在の会話履歴:")
     # st.write(st.session_state.conversation)
